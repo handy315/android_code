@@ -1,0 +1,110 @@
+package com.example.checkcode;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.support.v7.app.AppCompatActivity;
+import android.telephony.SmsMessage;
+import android.text.TextUtils;
+import android.widget.Button;
+import android.widget.EditText;
+
+import java.sql.Time;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * 4位短信验证码自动填入
+ */
+public class MainActivity extends AppCompatActivity {
+    private EditText checkCodeEditText;
+    private Button autoEdit;
+    private Handler handler;
+    private IntentFilter intentFilter;
+    private BroadcastReceiver smsReceiver;
+    private String patternCoder = "(?<!--\\d)\\d{4}(?!\\d)";
+    private String content;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        initView();
+        initData();
+    }
+
+    private void initView() {
+        checkCodeEditText = (EditText) findViewById(R.id.et_check_code);
+        autoEdit = (Button) findViewById(R.id.btn_auto_edit);
+    }
+
+    private void initData() {
+        handler = new Handler(){
+            @Override
+            public void handleMessage(Message msg) {
+                checkCodeEditText.setText(content);
+            }
+        };
+
+        intentFilter = new IntentFilter();
+        intentFilter.addAction("android.provider.Telephony.SMS_RECEIVED");
+        intentFilter.setPriority(Integer.MAX_VALUE);
+
+        initSmsReceiver();
+    }
+
+    private void initSmsReceiver() {
+        smsReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                Object[]objs = (Object[]) intent.getExtras().get("pdus");
+                for (Object obj : objs) {
+                    byte[]pdu = (byte[]) obj;
+                    SmsMessage sms = SmsMessage.createFromPdu(pdu);
+                    String messageBody = sms.getMessageBody();
+                    System.out.println("短信内容:"+messageBody);
+
+                    String originatingAddress = sms.getOriginatingAddress();
+                    System.out.println("来信号码："+originatingAddress);
+
+                    Time time = new Time(sms.getTimestampMillis());
+                    System.out.println("时间："+time);
+
+                    handler.sendEmptyMessage(1);
+                    if (!TextUtils.isEmpty(originatingAddress)) {
+
+                        String code = patternCode(messageBody);
+                        if(!TextUtils.isEmpty(code)){
+                            content = code;
+                            handler.sendEmptyMessage(1);
+                        }
+                    }
+
+                }
+            }
+        };
+        registerReceiver(smsReceiver,intentFilter);
+    }
+
+    private String patternCode(String messageBody) {
+        if(TextUtils.isEmpty(messageBody)){
+            return null;
+        }
+        Pattern pattern = Pattern.compile(patternCoder);
+        Matcher matcher = pattern.matcher(messageBody);
+        if(matcher.find()){
+            return matcher.group();
+        }
+        return null;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        unregisterReceiver(smsReceiver);
+    }
+}
